@@ -1,0 +1,43 @@
+rules_version = '2';
+// Above the Treeline: Firestore security rules.
+// Data: posts/{postId}/comments/{commentId} = { name, text, status, createdAt }
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Admins get a custom claim (admin: true) set from a trusted machine
+    // with the Firebase Admin SDK. Nobody can grant it from the browser.
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // MODERATION SWITCH: "approved" = comments go live right away.
+    // Change to "pending" to require admin approval (and set
+    // LP_COMMENT_STATUS = "pending" in firebase-config.js).
+    function newCommentStatus() { return 'approved'; }
+
+    function validComment(d) {
+      return d.keys().hasOnly(['name', 'text', 'status', 'createdAt'])
+        && d.keys().hasAll(['name', 'text', 'status', 'createdAt'])
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 40
+        && d.text is string && d.text.size() >= 1 && d.text.size() <= 1000
+        && d.status == newCommentStatus()
+        && d.createdAt == request.time;
+    }
+
+    match /posts/{postId}/comments/{commentId} {
+      allow read: if resource.data.status == 'approved' || isAdmin();
+      allow create: if postId.matches('^[a-z0-9][a-z0-9-]{0,80}$')
+                    && validComment(request.resource.data);
+      // Only an admin can moderate (approve/hide) or delete.
+      allow update: if isAdmin()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+                    && request.resource.data.status in ['pending', 'approved', 'hidden'];
+      allow delete: if isAdmin();
+    }
+
+    // Everything else is closed by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
