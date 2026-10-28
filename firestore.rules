@@ -1,6 +1,7 @@
 rules_version = '2';
 // Above the Treeline: Firestore security rules.
-// Data: posts/{postId}/comments/{commentId} = { name, text, status, createdAt }
+// Data: {kind}/{id}/comments/{commentId} = { name, text, status, createdAt }
+// kind is 'posts' (library) or 'stories' (My Story chapters). Nothing else.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -24,15 +25,17 @@ service cloud.firestore {
         && d.createdAt == request.time;
     }
 
-    match /posts/{postId}/comments/{commentId} {
-      allow read: if resource.data.status == 'approved' || isAdmin();
-      allow create: if postId.matches('^[a-z0-9][a-z0-9-]{0,80}$')
+    match /{kind}/{postId}/comments/{commentId} {
+      allow read: if kind in ['posts', 'stories'] && resource.data.status == 'approved'
+                  || kind in ['posts', 'stories'] && isAdmin();
+      allow create: if kind in ['posts', 'stories']
+                    && postId.matches('^[a-z0-9][a-z0-9-]{0,80}$')
                     && validComment(request.resource.data);
       // Only an admin can moderate (approve/hide) or delete.
-      allow update: if isAdmin()
+      allow update: if kind in ['posts', 'stories'] && isAdmin()
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
                     && request.resource.data.status in ['pending', 'approved', 'hidden'];
-      allow delete: if isAdmin();
+      allow delete: if kind in ['posts', 'stories'] && isAdmin();
     }
 
     // Everything else is closed by default.

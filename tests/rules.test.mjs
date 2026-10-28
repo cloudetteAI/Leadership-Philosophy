@@ -17,6 +17,9 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async ctx => {
     const db = ctx.firestore();
     await setDoc(doc(db, 'posts/p1/comments/ok'), { name: 'Ana', text: 'Great post', status: 'approved', createdAt: Timestamp.now() });
+    await setDoc(doc(db, 'stories/s1/comments/ok'), { name: 'Ana', text: 'Lovely chapter', status: 'approved', createdAt: Timestamp.now() });
+    await setDoc(doc(db, 'stories/s1/comments/wait'), { name: 'Bo', text: 'Pending', status: 'pending', createdAt: Timestamp.now() });
+    await setDoc(doc(db, 'secret/x1/comments/ok'), { name: 'Ana', text: 'hidden coll', status: 'approved', createdAt: Timestamp.now() });
     await setDoc(doc(db, 'posts/p1/comments/wait'), { name: 'Bo', text: 'Pending one', status: 'pending', createdAt: Timestamp.now() });
   });
 });
@@ -76,4 +79,20 @@ test('bad post ids and other collections are closed', async () => {
   await assertFails(addDoc(collection(anon(), 'posts', 'BAD ID!', 'comments'), good()));
   await assertFails(setDoc(doc(anon(), 'posts/p1'), { title: 'hijack' }));
   await assertFails(getDoc(doc(anon(), 'secrets/x')));
+});
+
+test('story comments: same rules as posts', async () => {
+  await assertSucceeds(getDoc(doc(anon(), 'stories/s1/comments/ok')));
+  await assertFails(getDoc(doc(anon(), 'stories/s1/comments/wait')));
+  await assertSucceeds(addDoc(collection(anon(), 'stories', 's1', 'comments'), good()));
+  await assertFails(addDoc(collection(anon(), 'stories', 's1', 'comments'), { ...good(), extra: 1 }));
+  await assertFails(addDoc(collection(anon(), 'stories', 's1', 'comments'), { ...good(), status: 'approved', name: 'x'.repeat(41) }));
+  await assertFails(updateDoc(doc(user(), 'stories/s1/comments/ok'), { status: 'hidden' }));
+  await assertSucceeds(updateDoc(doc(admin(), 'stories/s1/comments/wait'), { status: 'approved' }));
+});
+test('comments under any other top-level collection are closed', async () => {
+  await assertFails(addDoc(collection(anon(), 'secret', 'x1', 'comments'), good()));
+  await assertFails(getDoc(doc(anon(), 'secret/x1/comments/ok')));
+  await assertFails(getDoc(doc(admin(), 'secret/x1/comments/ok')));
+  await assertFails(addDoc(collection(anon(), 'stories', 'BAD ID!', 'comments'), good()));
 });

@@ -3,7 +3,7 @@
     {
       "id": "sample-clarity-before-speed",
       "title": "Sample: Clarity Before Speed",
-      "category": "general",
+      "category": "business",
       "type": "written",
       "date": "2026-10-27",
       "summary": "SAMPLE POST — replace me. Why naming the outcome out loud saves a team more time than moving fast.",
@@ -12,10 +12,10 @@
     {
       "id": "sample-three-coaching-questions",
       "title": "Sample: Three Coaching Questions (Audio)",
-      "category": "coaching",
+      "category": "kids",
       "type": "audio",
       "date": "2026-10-20",
-      "summary": "SAMPLE POST — replace me. A short audio note on three open questions that help people find their own answers.",
+      "summary": "SAMPLE POST — replace me. A short audio note on three open questions that help young players find their own answers.",
       "audio": "content/audio/sample-coaching-questions.mp3",
       "duration": "0:12",
       "body": "content/posts/sample-three-coaching-questions.md"
@@ -23,16 +23,16 @@
     {
       "id": "sample-trust-is-built-in-small-moments",
       "title": "Sample: Trust Is Built in Small Moments",
-      "category": "general",
+      "category": "life",
       "type": "written",
       "date": "2026-10-06",
-      "summary": "SAMPLE POST — replace me. Follow-through on small promises is how teams decide whether to believe the big ones.",
+      "summary": "SAMPLE POST — replace me. Follow-through on small promises is how the people closest to us decide what to believe.",
       "body": "content/posts/sample-trust-is-built-in-small-moments.md"
     },
     {
       "id": "sample-feedback-as-a-gift",
       "title": "Sample: Feedback That Lands",
-      "category": "coaching",
+      "category": "business",
       "type": "written",
       "date": "2026-09-22",
       "summary": "SAMPLE POST — replace me. A simple shape for feedback: what you saw, the impact, and an open question.",

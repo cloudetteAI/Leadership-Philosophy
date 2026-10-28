@@ -1,0 +1,17 @@
+{
+  "current": {
+    "id": "john-wooden",
+    "sample": true,
+    "name": "John Wooden",
+    "monogram": "JW",
+    "who": "Basketball coach and teacher who led UCLA to ten national championships, best known for his \"Pyramid of Success.\"",
+    "featured": "2026-10-28",
+    "quotes": [
+      { "text": "A coach is someone who can give correction without causing resentment.", "source": "Los Angeles Times, \"Woodenisms\" (2010)", "url": "https://www.latimes.com/archives/blogs/sports-now/story/2010-06-04/john-wooden-quotes-some-of-coach-john-woodens-favorite-maxims-woodenisms" },
+      { "text": "Never mistake activity for achievement.", "source": "Los Angeles Times, \"Woodenisms\" (2010)", "url": "https://www.latimes.com/archives/blogs/sports-now/story/2010-06-04/john-wooden-quotes-some-of-coach-john-woodens-favorite-maxims-woodenisms" },
+      { "text": "It's the little details that are vital. Little things make big things happen.", "source": "Los Angeles Times, \"Woodenisms\" (2010)", "url": "https://www.latimes.com/archives/blogs/sports-now/story/2010-06-04/john-wooden-quotes-some-of-coach-john-woodens-favorite-maxims-woodenisms" }
+    ],
+    "take": "PLACEHOLDER: Paul will write his own take here. Why this leader? What did he learn from them, and where has it shown up in his work, coaching or life?"
+  },
+  "archive": []
+}

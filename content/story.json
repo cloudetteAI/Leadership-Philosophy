@@ -1,0 +1,11 @@
+{
+  "entries": [
+    {
+      "id": "sample-chapter-the-road-in",
+      "title": "Sample Chapter: The Road In",
+      "date": "2026-10-28",
+      "summary": "SAMPLE ENTRY — this shows the format. Paul will replace it with the first chapter of his story.",
+      "body": "content/story/sample-chapter-the-road-in.md"
+    }
+  ]
+}

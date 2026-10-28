@@ -1,4 +1,4 @@
-// Above the Treeline: leadership notes by Cloudette.
+// Above the Treeline: leadership notes by Paul Draper.
 // Security notes: every piece of user or content text is inserted with
 // textContent / createTextNode (never innerHTML), so it can't run as code.
 'use strict';
@@ -51,18 +51,20 @@ const QUOTES = [
 ];
 
 /* ---------- Content loading & validation ---------- */
-const CATS = { general: 'General Leadership', coaching: 'Coaching' };
-const PATH_RE = /^content\/(posts|audio)\/[a-z0-9][a-z0-9-]*\.(md|txt|mp3|m4a|ogg|wav)$/;
+const CATS = { business: 'Leadership in Business', kids: 'Coaching Children', life: 'Life & Relationships' };
+const PATH_RE = /^content\/(posts|audio|story|video)\/[a-z0-9][a-z0-9-]*\.(md|txt|mp3|m4a|ogg|wav|mp4|webm|jpg|png|webp)$/;
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const NEW_DAYS = 14;
+const TYPE_LABEL = { written: 'Read', audio: 'Audio', video: 'Video' };
 let POSTS = null;
 
 export function cleanPosts(list) {
   return (Array.isArray(list) ? list : []).filter(p =>
     p && ID_RE.test(p.id) && typeof p.title === 'string' && CATS[p.category] &&
-    (p.type === 'written' || p.type === 'audio') && DATE_RE.test(p.date) &&
-    (!p.body || PATH_RE.test(p.body)) && (p.type !== 'audio' || PATH_RE.test(p.audio || ''))
+    (p.type === 'written' || p.type === 'audio' || p.type === 'video') && DATE_RE.test(p.date) &&
+    (!p.body || PATH_RE.test(p.body)) && (p.type !== 'audio' || PATH_RE.test(p.audio || '')) &&
+    (p.type !== 'video' || (PATH_RE.test(p.video || '') && (!p.poster || PATH_RE.test(p.poster))))
   );
 }
 // Newest first, always. Ties break by title so order is stable.
@@ -77,6 +79,27 @@ async function loadPosts() {
   return POSTS;
 }
 const isNew = p => (Date.now() - Date.parse(p.date + 'T00:00:00')) / 864e5 <= NEW_DAYS;
+
+/* ---------- Story + Leader of the Moment content ---------- */
+let STORY = null;
+export function cleanStory(list) {
+  return (Array.isArray(list) ? list : []).filter(e => e && ID_RE.test(e.id) && typeof e.title === 'string' && DATE_RE.test(e.date) && PATH_RE.test(e.body || ''));
+}
+async function loadStory() {
+  if (STORY) return STORY;
+  const data = await (await fetch('content/story.json', { cache: 'no-cache' })).json();
+  STORY = sortNewest(cleanStory(data.entries)); return STORY;
+}
+const HTTPS_RE = /^https:\/\/[^\s]+$/;
+function cleanLeader(l) {
+  if (!l || typeof l.name !== 'string' || !Array.isArray(l.quotes)) return null;
+  const quotes = l.quotes.filter(q => q && typeof q.text === 'string' && typeof q.source === 'string' && HTTPS_RE.test(q.url || '')).slice(0, 3);
+  return quotes.length ? { ...l, quotes, monogram: String(l.monogram || l.name).replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() } : null;
+}
+async function loadLeader() {
+  const data = await (await fetch('content/leader.json', { cache: 'no-cache' })).json();
+  return { current: cleanLeader(data.current), archive: (Array.isArray(data.archive) ? data.archive : []).map(cleanLeader).filter(Boolean) };
+}
 const fmtDate = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
 /* ---------- Safe mini-markdown → DOM (no HTML passthrough) ---------- */
@@ -116,17 +139,38 @@ const HERO_ART = `
 <g fill="var(--ridge-front)"><path d="M60 180 l14 -46 l14 46z M95 182 l11 -36 l11 36z M1330 180 l14 -48 l14 48z M1365 182 l11 -34 l11 34z"/></g>
 <path d="M0 175 C200 160 360 185 560 170 C760 155 900 182 1100 168 C1260 158 1360 172 1440 165 V200 H0Z" fill="var(--rock)" opacity=".9"/>
 <path d="M0 190 C240 180 480 196 720 186 C960 176 1200 194 1440 184 V200 H0Z" fill="var(--snow)"/>`;
+const HERO_VIDEO = 'content/video/hero.mp4', HERO_POSTER = 'content/video/hero-poster.jpg';
+function heroVideo() {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const phone = matchMedia('(max-width: 719px)').matches;
+  // Muted, decorative, no audio track. Phones and reduced-motion users get the still poster only.
+  const v = h('video', { class: 'hero-video', muted: true, loop: true, playsinline: true, preload: phone || reduce ? 'none' : 'auto', poster: HERO_POSTER, 'aria-hidden': 'true', tabindex: '-1', disablepictureinpicture: true });
+  v.muted = true; v.defaultMuted = true; v.setAttribute('playsinline', '');
+  const kids = [v, h('div', { class: 'hero-veil', 'aria-hidden': 'true' })];
+  if (!phone && !reduce) {
+    v.src = HERO_VIDEO; v.autoplay = true;
+    const btn = h('button', { class: 'icon-btn video-toggle', type: 'button', 'aria-label': 'Pause background video', 'aria-pressed': 'false' }, icon('pause'));
+    btn.addEventListener('click', () => {
+      if (v.paused) { v.play().catch(() => {}); } else v.pause();
+    });
+    const sync = () => { const p = v.paused; btn.replaceChildren(icon(p ? 'play' : 'pause')); btn.setAttribute('aria-label', p ? 'Play background video' : 'Pause background video'); btn.setAttribute('aria-pressed', String(p)); };
+    v.addEventListener('play', sync); v.addEventListener('pause', sync);
+    v.play?.()?.catch?.(() => sync());
+    kids.push(btn);
+  }
+  return kids;
+}
 function hero() {
   const art = svg(HERO_ART, 'hero-art'); art.setAttribute('viewBox', '0 0 1440 200'); art.setAttribute('preserveAspectRatio', 'none');
-  return h('section', { class: 'hero' },
-    h('div', { class: 'sun', 'aria-hidden': 'true' }),
+  return h('section', { class: 'hero hero-has-video' },
+    ...heroVideo(),
     h('div', { class: 'wrap hero-in' },
-      h('p', { class: 'eyebrow' }, 'Leadership \u00b7 Coaching \u00b7 Colorado air'),
+      h('p', { class: 'eyebrow' }, 'Business \u00b7 Coaching kids \u00b7 Life'),
       h('h1', {}, 'Lead from above the treeline.'),
-      h('p', { class: 'lede' }, 'Hi, I\u2019m Cloudette. This is where I share what I\u2019m learning about leading people and coaching them to their best, in short reads and audio notes. Pull up a chair by the fire and leave a thought.'),
+      h('p', { class: 'lede' }, 'Hi, I\u2019m Paul. [Placeholder intro \u2014 Paul will write this in his own words.] This is where I share what I\u2019ve learned about leading people at work, coaching kids, and showing up for the people in my life. Pull up a chair by the fire and leave a thought.'),
       h('div', { class: 'btn-row' },
         h('a', { class: 'btn btn-primary', href: '#/library' }, 'Explore the library'),
-        h('a', { class: 'btn btn-ghost', href: '#/library?cat=coaching' }, 'Coaching notes'))),
+        h('a', { class: 'btn btn-ghost', href: '#/story' }, 'Read my story'))),
     art);
 }
 function divider() {
@@ -181,12 +225,33 @@ function quoteRotator() {
   return card;
 }
 
+/* ---------- Leader of the Moment ---------- */
+function leaderBlock(l, compact = false) {
+  return h('article', { class: 'leader' + (compact ? ' leader-past' : ''), 'data-leader': l.id || '' },
+    h('div', { class: 'leader-head' },
+      h('div', { class: 'monogram', 'aria-hidden': 'true' }, l.monogram),
+      h('div', {},
+        h('p', { class: 'eyebrow' }, compact ? 'Past leader' : 'Leader of the moment', l.sample ? ' \u00b7 SAMPLE' : ''),
+        h('h3', {}, l.name),
+        h('p', { class: 'leader-who' }, l.who || ''))),
+    h('ul', { class: 'leader-quotes' }, l.quotes.map(q => h('li', {},
+      h('blockquote', {}, h('p', {}, `\u201c${q.text}\u201d`)),
+      h('p', { class: 'quote-by' }, '\u2014 ', q.source, ' ', h('a', { href: q.url, target: '_blank', rel: 'noopener noreferrer' }, 'source'))))),
+    h('div', { class: 'leader-take' }, h('h4', {}, 'Paul\u2019s take'), h('p', {}, l.take || '')));
+}
+async function leaderSection() {
+  let data; try { data = await loadLeader(); } catch { return null; }
+  if (!data.current) return null;
+  const past = data.archive.length ? h('details', { class: 'leader-archive' }, h('summary', {}, `Past leaders (${data.archive.length})`), data.archive.map(l => leaderBlock(l, true))) : null;
+  return h('section', { class: 'section leader-sec', id: 'leader' }, h('div', { class: 'wrap' }, leaderBlock(data.current), past));
+}
+
 /* ---------- Cards ---------- */
 function postCard(p) {
   return h('a', { class: 'card', href: `#/post/${p.id}`, 'data-id': p.id, 'data-cat': p.category, 'data-date': p.date },
     h('div', { class: 'meta' },
       h('span', { class: `chip chip-${p.category}` }, CATS[p.category]),
-      h('span', { class: 'chip chip-type' }, icon(p.type === 'audio' ? 'audio' : 'text', '0 0 12 12'), p.type === 'audio' ? 'Audio' : 'Read'),
+      h('span', { class: 'chip chip-type' }, icon(p.type === 'written' ? 'text' : 'audio', '0 0 12 12'), TYPE_LABEL[p.type]),
       isNew(p) && h('span', { class: 'chip chip-new' }, 'New')),
     h('h3', {}, p.title),
     h('p', {}, p.summary || ''),
@@ -200,6 +265,7 @@ async function viewHome() {
   main().replaceChildren(
     hero(),
     h('section', { class: 'quote-sec' }, h('div', { class: 'wrap' }, h('h2', { class: 'sr-only' }, 'Quote of the moment'), quoteRotator())),
+    await leaderSection(),
     h('div', { class: 'wrap' }, divider()),
     h('section', { class: 'section' }, h('div', { class: 'wrap' },
       h('div', { class: 'sec-head' }, h('div', {}, h('h2', {}, 'Latest from the trail'), h('p', {}, 'Newest posts land on top, automatically.')),
@@ -210,7 +276,7 @@ async function viewLibrary(params) {
   const posts = await loadPosts();
   let cat = CATS[params.get('cat')] ? params.get('cat') : 'all';
   const grid = h('div', { class: 'grid', id: 'post-grid', 'aria-live': 'polite' });
-  const btns = [['all', 'All'], ['general', CATS.general], ['coaching', CATS.coaching]].map(([k, label]) =>
+  const btns = [['all', 'All'], ...Object.entries(CATS)].map(([k, label]) =>
     h('button', { type: 'button', 'data-cat': k, 'aria-pressed': String(k === cat), onclick: () => { cat = k; history.replaceState(null, '', k === 'all' ? '#/library' : `#/library?cat=${k}`); paint(); } }, label));
   function paint() {
     btns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.cat === cat)));
@@ -218,7 +284,7 @@ async function viewLibrary(params) {
     grid.replaceChildren(...(list.length ? list.map(postCard) : [h('p', { class: 'empty' }, 'No posts here yet. Check back soon.')]));
   }
   main().replaceChildren(h('section', { class: 'section' }, h('div', { class: 'wrap' },
-    h('div', { class: 'sec-head' }, h('div', {}, h('h1', {}, 'The library'), h('p', {}, 'Written and audio notes on leadership and coaching. Newest first.')),
+    h('div', { class: 'sec-head' }, h('div', {}, h('h1', {}, 'The library'), h('p', {}, 'Written and audio notes on business, coaching kids, and life. Newest first.')),
       h('div', { class: 'filters', role: 'group', 'aria-label': 'Filter by topic' }, btns)),
     grid)));
   paint();
@@ -233,16 +299,63 @@ async function viewPost(id) {
     h('h1', {}, p.title),
     h('div', { class: 'meta' },
       h('span', { class: `chip chip-${p.category}` }, CATS[p.category]),
-      h('span', { class: 'chip chip-type' }, p.type === 'audio' ? 'Audio' : 'Read'),
+      h('span', { class: 'chip chip-type' }, TYPE_LABEL[p.type]),
       isNew(p) && h('span', { class: 'chip chip-new' }, 'New'),
       h('time', { datetime: p.date }, fmtDate(p.date))),
-    p.type === 'audio' && h('div', { class: 'audio-box' }, h('p', {}, 'Listen'), h('audio', { controls: true, preload: 'metadata', src: p.audio }, 'Your browser does not support audio.')));
+    p.type === 'audio' && h('div', { class: 'audio-box' }, h('p', {}, 'Listen'), h('audio', { controls: true, preload: 'metadata', src: p.audio }, 'Your browser does not support audio.')),
+    p.type === 'video' && h('div', { class: 'video-box' }, h('video', { controls: true, playsinline: true, preload: 'metadata', src: p.video, poster: p.poster || null }, 'Your browser does not support video.')));
   main().replaceChildren(art);
   if (p.body) {
     try { const r = await fetch(p.body, { cache: 'no-cache' }); art.append(renderMarkdown(await r.text())); }
     catch { art.append(h('p', {}, 'Could not load this post.')); }
   }
-  art.append(commentsSection(p.id));
+  art.append(commentsSection('posts', p.id));
+}
+
+/* ---------- My Story ---------- */
+function storyCard(e, n) {
+  return h('a', { class: 'card story-card', href: `#/story/${e.id}`, 'data-id': e.id, 'data-date': e.date },
+    h('div', { class: 'meta' }, h('span', { class: 'chip chip-story' }, `Chapter ${n}`), isNew(e) && h('span', { class: 'chip chip-new' }, 'New')),
+    h('h3', {}, e.title), h('p', {}, e.summary || ''),
+    h('div', { class: 'meta' }, h('time', { datetime: e.date }, fmtDate(e.date))));
+}
+async function viewStory(params) {
+  const entries = await loadStory(); // newest first
+  let order = params.get('order') === 'oldest' ? 'oldest' : 'newest';
+  const list = h('div', { class: 'story-list', id: 'story-list', 'aria-live': 'polite' });
+  const btns = [['newest', 'Newest first'], ['oldest', 'Read from the beginning']].map(([k, label]) =>
+    h('button', { type: 'button', 'data-order': k, 'aria-pressed': String(k === order), onclick: () => { order = k; history.replaceState(null, '', k === 'newest' ? '#/story' : '#/story?order=oldest'); paint(); } }, label));
+  function paint() {
+    btns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.order === order)));
+    const chrono = [...entries].reverse();
+    const shown = order === 'oldest' ? chrono : entries;
+    list.replaceChildren(...(shown.length ? shown.map(e => storyCard(e, chrono.indexOf(e) + 1)) : [h('p', { class: 'empty' }, 'No chapters yet.')]));
+  }
+  main().replaceChildren(h('section', { class: 'section' }, h('div', { class: 'wrap narrow' },
+    h('div', { class: 'sec-head' }, h('div', {}, h('h1', {}, 'My Story'), h('p', {}, 'A life told one chapter at a time.')),
+      h('div', { class: 'filters', role: 'group', 'aria-label': 'Reading order' }, btns)),
+    h('div', { class: 'coming-soon' }, h('h2', {}, 'Paul\u2019s story is coming soon'),
+      h('p', {}, 'From the high country to the sidelines, there\u2019s a lot to tell. New chapters will appear here as Paul writes them. The entry below is a sample that shows the format.')),
+    list)));
+  paint();
+}
+async function viewStoryEntry(id) {
+  const entries = await loadStory();
+  const e = entries.find(x => x.id === id);
+  if (!e) { main().replaceChildren(h('div', { class: 'post' }, h('h1', {}, 'Chapter not found'), h('a', { href: '#/story' }, 'Back to My Story'))); return; }
+  document.title = `${e.title} \u00b7 Paul Draper`;
+  const chrono = [...entries].reverse(), k = chrono.indexOf(e);
+  const art = h('article', { class: 'post' },
+    h('a', { class: 'back', href: '#/story' }, '\u2190 My Story'),
+    h('h1', {}, e.title),
+    h('div', { class: 'meta' }, h('span', { class: 'chip chip-story' }, `Chapter ${k + 1}`), h('time', { datetime: e.date }, fmtDate(e.date))));
+  main().replaceChildren(art);
+  try { const r = await fetch(e.body, { cache: 'no-cache' }); art.append(renderMarkdown(await r.text())); }
+  catch { art.append(h('p', {}, 'Could not load this chapter.')); }
+  art.append(h('nav', { class: 'chap-nav', 'aria-label': 'Chapters' },
+    k > 0 ? h('a', { href: `#/story/${chrono[k - 1].id}` }, '\u2190 Previous chapter') : h('span'),
+    k < chrono.length - 1 ? h('a', { href: `#/story/${chrono[k + 1].id}` }, 'Next chapter \u2192') : h('span')));
+  art.append(commentsSection('stories', e.id));
 }
 
 /* ---------- Comments ---------- */
@@ -267,10 +380,11 @@ function rateRecord() {
   log.push(now); localStorage.setItem('lp_rate', JSON.stringify(log));
 }
 
+const KINDS = ['posts', 'stories'];
 const localStore = {
-  key: id => `lp_comments_${id}`,
-  async list(id) { try { return JSON.parse(localStorage.getItem(this.key(id)) || '[]').filter(c => c.status === 'approved'); } catch { return []; } },
-  async add(id, c) { const all = JSON.parse(localStorage.getItem(this.key(id)) || '[]'); all.push({ ...c, createdAt: Date.now() }); localStorage.setItem(this.key(id), JSON.stringify(all)); },
+  key: (kind, id) => kind === 'posts' ? `lp_comments_${id}` : `lp_comments_${kind}_${id}`,
+  async list(kind, id) { try { return JSON.parse(localStorage.getItem(this.key(kind, id)) || '[]').filter(c => c.status === 'approved'); } catch { return []; } },
+  async add(kind, id, c) { const all = JSON.parse(localStorage.getItem(this.key(kind, id)) || '[]'); all.push({ ...c, createdAt: Date.now() }); localStorage.setItem(this.key(kind, id), JSON.stringify(all)); },
 };
 let fsPromise = null;
 function cloudStore() {
@@ -280,21 +394,22 @@ function cloudStore() {
     import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`),
   ]).then(([app, fs]) => ({ fs, db: fs.getFirestore(app.initializeApp(cfg())) }));
   return {
-    async list(id) {
+    async list(kind, id) {
       const { fs, db } = await fsPromise;
-      const q = fs.query(fs.collection(db, 'posts', id, 'comments'), fs.where('status', '==', 'approved'), fs.orderBy('createdAt', 'desc'), fs.limit(100));
+      const q = fs.query(fs.collection(db, kind, id, 'comments'), fs.where('status', '==', 'approved'), fs.orderBy('createdAt', 'desc'), fs.limit(100));
       const snap = await fs.getDocs(q);
       return snap.docs.map(d => { const x = d.data(); return { name: x.name, text: x.text, status: x.status, createdAt: x.createdAt?.toMillis?.() || 0 }; });
     },
-    async add(id, c) {
+    async add(kind, id, c) {
       const { fs, db } = await fsPromise;
-      await fs.addDoc(fs.collection(db, 'posts', id, 'comments'), { name: c.name, text: c.text, status: c.status, createdAt: fs.serverTimestamp() });
+      await fs.addDoc(fs.collection(db, kind, id, 'comments'), { name: c.name, text: c.text, status: c.status, createdAt: fs.serverTimestamp() });
     },
   };
 }
 const store = () => (demoMode() ? localStore : cloudStore());
 
-function commentsSection(postId) {
+function commentsSection(kind, postId) {
+  if (!KINDS.includes(kind) || !ID_RE.test(postId)) return h('p', {}, 'Comments unavailable.');
   const list = h('ul', { class: 'clist', id: 'comment-list', 'aria-live': 'polite' });
   const status = h('p', { class: 'status', role: 'status' });
   const name = h('input', { id: 'c-name', name: 'name', maxlength: LIMITS.name, autocomplete: 'nickname', required: true });
@@ -305,7 +420,7 @@ function commentsSection(postId) {
   text.addEventListener('input', () => { count.textContent = `${text.value.length} / ${LIMITS.text}`; });
   async function refresh() {
     try {
-      const items = (await store().list(postId)).sort((a, b) => b.createdAt - a.createdAt); // newest on top
+      const items = (await store().list(kind, postId)).sort((a, b) => b.createdAt - a.createdAt); // newest on top
       list.replaceChildren(...(items.length ? items.map(c => h('li', {},
         h('div', { class: 'c-head' }, h('b', {}, c.name), h('time', {}, c.createdAt ? new Date(c.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'just now')),
         h('p', { class: 'c-text' }, c.text))) : [h('li', { class: 'empty' }, 'No comments yet. Be the first.')]));
@@ -324,7 +439,7 @@ function commentsSection(postId) {
     send.disabled = true;
     try {
       const st = commentStatus();
-      await store().add(postId, { name: n, text: t, status: st });
+      await store().add(kind, postId, { name: n, text: t, status: st });
       rateRecord(); text.value = ''; count.textContent = `0 / ${LIMITS.text}`;
       status.textContent = st === 'pending' ? 'Thanks! Your comment will appear after review.' : 'Thanks for sharing!';
       await refresh();
@@ -340,12 +455,14 @@ async function route() {
   const raw = location.hash.replace(/^#/, '') || '/';
   const [path, qs] = raw.split('?');
   const params = new URLSearchParams(qs || '');
-  document.title = 'Above the Treeline \u00b7 Leadership notes by Cloudette';
+  document.title = 'Above the Treeline \u00b7 Paul Draper on leadership, coaching & life';
   clearInterval(rotTimer);
-  const navKey = path.startsWith('/library') || path.startsWith('/post') ? 'library' : 'home';
+  const navKey = path.startsWith('/story') ? 'story' : path.startsWith('/library') || path.startsWith('/post') ? 'library' : 'home';
   document.querySelectorAll('[data-nav]').forEach(a => { if (a.dataset.nav === navKey) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   try {
     if (path.startsWith('/post/')) await viewPost(decodeURIComponent(path.slice(6)));
+    else if (path.startsWith('/story/')) await viewStoryEntry(decodeURIComponent(path.slice(7)));
+    else if (path.startsWith('/story')) await viewStory(params);
     else if (path.startsWith('/library')) await viewLibrary(params);
     else await viewHome();
   } catch { main().replaceChildren(h('div', { class: 'post' }, h('p', {}, 'Something went wrong loading this page.'))); }
